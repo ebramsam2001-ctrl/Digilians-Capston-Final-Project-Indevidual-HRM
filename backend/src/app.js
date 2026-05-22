@@ -1,6 +1,9 @@
 // express
 const express = require("express");
 
+// Port
+const PORT = process.env.PORT || 8000;
+
 // app
 const app = express();
 
@@ -24,9 +27,6 @@ if(process.env.NODE_ENV === "dev") {
 app.get("/health", (req, res, next) => {
     return res.status(200).json({message: "☑️ All things is good"});
 });
-
-// Port
-const PORT = process.env.PORT || 8000;
 
 // Run server
 app.listen(PORT, () => {
