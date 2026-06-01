@@ -20,7 +20,6 @@ const connectDB = async () => {
         const connected = await mongoose.connect(url, {
             maxPoolSize: 10, // make 10 chanals to request pressure handling and speedly
             serverSelectionTimeoutMS: 5000, // the connection methode will wait max: 5 Sec to not wait forever
-            dbName:`HRManagement`,
         });
 
         console.log(`MongoDB connected: ${connected.connection.host}`);
