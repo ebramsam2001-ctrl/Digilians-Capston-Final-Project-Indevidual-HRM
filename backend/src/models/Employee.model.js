@@ -1,3 +1,6 @@
+// use use strict mode
+"use strict"
+
 // requires
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");

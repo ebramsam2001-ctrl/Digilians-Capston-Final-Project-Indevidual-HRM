@@ -1,37 +1,67 @@
-// express
-const express = require("express");
+// use use strict mode
+"use strict"
 
-// Port
-const PORT = process.env.PORT || 8000;
+// requires
+const express = require("express");
+const helmet = require("helmet");
+const cors = require("cors");
+const hpp = require("hpp");
+const cookieParser = require("cookie-parser");
+
+
+// middlewares
+// security middleware
+const sanitize = require("./middlewares/sanitize.middleware");
+const xssClean = require("./middlewares/xssClean.middleware");
+const { apiLimiter } = require("./middlewares/rateLimiter.middleware");
+
+// global error handler middle ware
+const { notFound, errorHandler} = require("./middlewares/error.middleware");
 
 // app
 const app = express();
 
-// middleware json
-app.use(express.json());
+// middlewares
+// helmet for security
+app.use(helmet());
 
-// connection DB
-const connectDB = require("./config/db");
+// cors
+app.use(cors({
+    origin: process.env.CLIENT_URL, // this path only
+    credentials: true, // transfare the cookes between front-end and back-end safly
+}));
 
-connectDB();
+// block NOSQL injection (remove $, . from inputs)
+app.use("/", sanitize);
 
-// simple logger
-if(process.env.NODE_ENV === "dev") {
-    app.use((req, res, next) => {
-        console.log(`${req.method} ${req.originalUrl}`);
-        next();
-    });
-}
+// xss clean (defence from JS injection)
+app.use("/", xssClean);
 
-// Test rout
+// hpp (HTTP Parameter Polution) -> get the last parameter only
+app.use(hpp());
+
+// parse to JSON with limit 10kb
+app.use(express.json({limit: "10kb"}));
+
+// read the cookies
+app.use(cookieParser());
+
+// protect the server from Brute Force attack
+app.use("/api", apiLimiter);
+
+// Roures ------------------------------------------------------------
+// Test route
 app.get("/health", (req, res, next) => {
     return res.status(200).json({message: "☑️ All things is good"});
 });
 
-// Run server
-app.listen(PORT, () => {
-    console.log(`Server is running in: ${PORT}`);
-});
+
+// error handling
+// not founded path
+app.use(notFound);
+
+// global error handler
+app.use(errorHandler);
 
 // exporting
 module.exports = app;

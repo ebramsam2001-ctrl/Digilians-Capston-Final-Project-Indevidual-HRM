@@ -1,3 +1,6 @@
+// use use strict mode
+"use strict"
+
 // require rate limiter
 const rateLimit = require("express-rate-limit");
 

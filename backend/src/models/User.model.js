@@ -1,3 +1,6 @@
+// use use strict mode
+"use strict"
+
 // requires
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
@@ -24,7 +27,7 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: [true, `role is required`],
         enum: {
-            values: [`hr_admin`, `employee`],
+            values: [`hr_admin`, `employee`, `super_admin`],
             message: `Not a valid role`,
         },
         default: `employee`,
