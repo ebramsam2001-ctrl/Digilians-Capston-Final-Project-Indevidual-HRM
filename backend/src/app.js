@@ -15,6 +15,9 @@ const sanitize = require("./middlewares/sanitize.middleware");
 const xssClean = require("./middlewares/xssClean.middleware");
 const { apiLimiter } = require("./middlewares/rateLimiter.middleware");
 
+// morgan logger middleware
+const loggerMiddleware = require("./middlewares/logger.middleware");
+
 // global error handler middle ware
 const { notFound, errorHandler} = require("./middlewares/error.middleware");
 
@@ -48,6 +51,9 @@ app.use(cookieParser());
 
 // protect the server from Brute Force attack
 app.use("/api", apiLimiter);
+
+// logger middleware
+app.use(loggerMiddleware);
 
 // Roures ------------------------------------------------------------
 // Test route
