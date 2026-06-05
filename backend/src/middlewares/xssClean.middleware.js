@@ -1,17 +1,15 @@
 // use use strict mode
 "use strict"
 
-const router = require("express").Router();
-
 const { encode } = require("html-entities");
 
-router.use((req, res, next) => {
+const xssClean = (req, res, next) => {
   const sanitizeText = (obj) => {
     if (obj && typeof obj === 'object') {
       for (const key in obj) {
         if (typeof obj[key] === 'string') {
           // Encodes harmful script tags (e.g., <script> becomes &lt;script&gt;)
-          obj[key] = encode(obj[key]); 
+          obj[key] = encode(obj[key]);
         } else if (typeof obj[key] === 'object') {
           sanitizeText(obj[key]); // Recursively looks inside nested objects/arrays
         }
@@ -32,7 +30,7 @@ router.use((req, res, next) => {
   }
 
   next();
-});
+};
 
 // exporting
-module.exports = router;
+module.exports = xssClean;

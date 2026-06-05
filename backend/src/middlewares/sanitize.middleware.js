@@ -1,9 +1,7 @@
 // use use strict mode
 "use strict"
 
-const router = require("express").Router();
-
-router.use((req, res, next) => {
+const sanitization = (req, res, next) => {
   const clean = (obj) => {
     if (obj && typeof obj === 'object') {
       for (const key in obj) {
@@ -26,10 +24,10 @@ router.use((req, res, next) => {
 
   if (req.query) {
     clean(req.query);
-  } 
+  }
 
   next();
-});
+};
 
 // exporting
-module.exports = router;
+module.exports = sanitization;

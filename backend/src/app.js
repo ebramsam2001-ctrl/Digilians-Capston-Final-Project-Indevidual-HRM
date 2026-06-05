@@ -35,10 +35,10 @@ app.use(cors({
 }));
 
 // block NOSQL injection (remove $, . from inputs)
-app.use("/", sanitize);
+app.use(sanitize);
 
 // xss clean (defence from JS injection)
-app.use("/", xssClean);
+app.use(xssClean);
 
 // hpp (HTTP Parameter Polution) -> get the last parameter only
 app.use(hpp());
@@ -49,11 +49,11 @@ app.use(express.json({limit: "10kb"}));
 // read the cookies
 app.use(cookieParser());
 
-// protect the server from Brute Force attack
-app.use("/api", apiLimiter);
-
 // logger middleware
 app.use(loggerMiddleware);
+
+// protect the server from Brute Force attack
+app.use("/api", apiLimiter);
 
 // Roures ------------------------------------------------------------
 // Test route
