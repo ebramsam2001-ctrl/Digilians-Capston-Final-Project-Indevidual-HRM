@@ -92,7 +92,7 @@ userSchema.pre(`save`, async function(next) {
 
 // password change tracking
 userSchema.pre(`save`, function(next) {
-    if(!this.isModified(`passwordHashed` || this.isNew)) {
+    if(!this.isModified(`passwordHashed`) || this.isNew) {
         return next();
     }
 
