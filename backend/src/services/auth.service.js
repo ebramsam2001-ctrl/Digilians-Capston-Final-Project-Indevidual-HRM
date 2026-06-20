@@ -1,7 +1,7 @@
 // use use strict mode
 "use strict"
 
-//requires
+// requires
 // Libraries
 const crypto = require("crypto");
 const mongoose = require("mongoose");
@@ -121,13 +121,13 @@ const login = async (email, password, ipAddress, userAgent) => {
 };
 
 // logout
-const login = async (rawRefreshToken) => {
+const logout = async (rawRefreshToken) => {
     // check if already logged out
     if(!rawRefreshToken) {
         return ;
     }
 
-    // hash row for comparing with hash password in database
+    // row hash for comparing with hash password in database
     const hash = hashToken(rawRefreshToken);
 
     // delete the refresh token from database
@@ -146,8 +146,132 @@ const refreshAccessToken = async (rawRefreshToken, ipAddress, userAgent) => {
     try {
         decoded = verifyRefreshToken(rawRefreshToken);
     } catch (error) {
+        // throw error
         throw new AppError(`Invalid token.`, 401);
     }
 
+    // check if the token exist and (not alredy used, logged out)
+    // row hash for comparing with hash password in database
+    const hash = hashToken(rawRefreshToken);
     
+    // get the token from database
+    const stored = await RefreshToken.findOne({ tokenHash: hash });
+
+    // check if (hashed token not exist, already used, or logged out)
+    // reuse detection
+    if(!stored) {
+        // delete all refreshtokens in database and eject the user and the attacker
+        await RefreshToken.deleteMany({ userId: decoded.userId });
+
+        // throw error
+        throw new AppError(`Refresh token reuse detected. All sessions revoked.`, 401);
+    }
+
+    // get the user by ID if exist
+    const user = await User.findById(decoded.userId);
+
+    // check if user not exist or is not active
+    if(!user || user.accountStatus !== "active") {
+        // throw error
+        throw new AppError(`User not found`, 401);
+    }
+
+    // delete the old token and creater a new one
+    // delete the old refresh token
+    await stored.deleteOne();
+
+    // create a new one
+    const newAccessToken = signAccessToken(user._id, user.role);
+    const newRawRefresh  = signRefreshToken(user._id);
+
+    // save it to database
+    await RefreshToken.create({
+        userId: user._id,
+        tokenHash: hashToken(newRawRefresh),
+        ipAddress: ipAddress,
+        userAgent: userAgent,
+        expiresAt: parseExpiryToDate(process.env.JWT_REFRESH_EXPIRES),
+    });
+
+    // return
+    return {
+        accessToken: newAccessToken,
+        refreshToken: newRawRefresh,
+    };
+};
+
+// forget password
+const forgotPassword = async (email) => {
+    // get user by email
+    const user = await User.findOne({ email: email });
+
+    // check if email not exist
+    if(!user) {
+        return ;
+    }
+
+    // token for send to user
+    const rawToken = user.createPasswordResetToken();
+
+    await user.save({ validateBeforeSave: false }); // because 1 field only updated
+
+    // send reset email password (add token to URL)
+    await emailService.sendPasswordReset(email, rawToken);
+};
+
+// validate token that sent to user and set new password
+// reset password
+const resetPassword = async (rawToken, newPassword) => {
+    // hash the token that sent by email
+    const hashToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    // get user by password reset token and not expired yet
+    const user = await User.findOne({
+        passwordResetToken: hashToken,
+        passwordResetExpires: { $gt: Date.now() }, // not expired yet
+    });
+
+    // check if token is not correct or expired
+    if(!user) {
+        // throw error
+        throw new AppError(`Token is invalid.`, 400);
+    }
+
+    // set the new password
+    user.passwordHashed = newPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    // save the changes
+    await user.save();
+
+    // close all session for this user
+    // delete all refresh tokens
+    await RefreshToken.deleteMany({ userId: user._id });
+};
+
+
+// get the current logged in user's profile
+const getMe = async (userId) => {
+    // get user by ID
+    const user = await User.findById(userId);
+
+    // check if user is not exist
+    if(!user) {
+        // throw error
+        throw new AppError(`User not found.`, 404);
+    }
+
+    // return
+    return user;
+};
+
+// exporting
+module.exports = {
+    login,
+    logout,
+    refreshAccessToken,
+    forgotPassword,
+    resetPassword,
+    getMe,
 };

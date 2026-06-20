@@ -108,7 +108,122 @@ class EmailService {
             `,
         });
     }
+
+    // leave approved email
+    async sendLeaveApproved(email, name, leaveRequest) {
+        // get client URL
+        const clientURL = process.env.CLIENT_URL || "http://localhost:3000";
+
+        // start and end of the leave
+        const start = leaveRequest.startDate?.toISOString().split("T")[0]; // take the date only from the ISO form
+        const end = leaveRequest.endDate?.toISOString().split("T")[0]; // take the date only from the ISO form
+
+        await this._send({
+            to: email,
+            subject: `HRM Pro — Your Leave Request Has Been Approved`,
+            // body
+            html: `
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+                  <h2 style="color:#16a34a;">Leave Approved ✓</h2>
+                  <p>Hi ${name}, your leave request has been approved.</p>
+                  <table style="border-collapse:collapse;width:100%;margin:16px 0;">
+                    <tr>
+                      <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:bold;width:40%;">Leave Type</td>
+                      <td style="padding:8px;border:1px solid #e5e7eb;text-transform:capitalize;">${leaveRequest.leaveType}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:bold;">From</td>
+                      <td style="padding:8px;border:1px solid #e5e7eb;">${start}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:bold;">To</td>
+                      <td style="padding:8px;border:1px solid #e5e7eb;">${end}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:bold;">Duration</td>
+                      <td style="padding:8px;border:1px solid #e5e7eb;">${leaveRequest.durationDays} business day(s)</td>
+                    </tr>
+                  </table>
+                  <p>You can view your leave history at <a href="${clientURL}">${clientURL}</a>.</p>
+                  <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+                  <p style="color:#9ca3af;font-size:12px;">HRM Pro — Human Resource Management System</p>
+                </div>
+            `,
+        });
+    }
+
+    // leave rejected email
+    async sendLeaveRejected(email, name, leaveRequest) {
+        // get client URL
+        const clientURL = process.env.CLIENT_URL || "http://localhost:3000";
+
+        // start and end of the leave
+        const start = leaveRequest.startDate?.toISOString().split("T")[0]; // take the date only from the ISO form
+        const end = leaveRequest.endDate?.toISOString().split("T")[0]; // take the date only from the ISO form
+
+        // reason
+        const reasonText = leaveRequest.rejectionReason ?
+            `<p><strong>Reason:</strong> ${leaveRequest.rejectionReason}</p>` :
+            "";
+
+        await this._send({
+            to: email,
+            subject: `HRM Pro — Your Leave Request Has Been Rejected`,
+            // body
+            html: `
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+                  <h2 style="color:#dc2626;">Leave Request Rejected</h2>
+                  <p>Hi ${name}, unfortunately your leave request has been rejected.</p>
+                  <table style="border-collapse:collapse;width:100%;margin:16px 0;">
+                    <tr>
+                      <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:bold;width:40%;">Leave Type</td>
+                      <td style="padding:8px;border:1px solid #e5e7eb;text-transform:capitalize;">${leaveRequest.leaveType}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:bold;">From</td>
+                      <td style="padding:8px;border:1px solid #e5e7eb;">${start}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:bold;">To</td>
+                      <td style="padding:8px;border:1px solid #e5e7eb;">${end}</td>
+                    </tr>
+                  </table>
+                  ${reasonText}
+                  <p>Please contact HR if you have questions.
+                     View your requests at <a href="${clientURL}">${clientURL}</a>.</p>
+                  <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+                  <p style="color:#9ca3af;font-size:12px;">HRM Pro — Human Resource Management System</p>
+                </div>
+            `,
+        });
+    }
+
+    // payslip available email
+    async sendPayslipAvailable(email, name, month) {
+        // get client URL
+        const clientURL = process.env.CLIENT_URL || "http://localhost:3000";
+
+        await this._send({
+            to: email,
+            subject: `HRM Pro — Your Payslip for ${month} is Ready`,
+            html: `
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+                  <h2 style="color:#1a56db;">Payslip Available</h2>
+                  <p>Hi ${name}, your payslip for <strong>${month}</strong> is now available.</p>
+                  <p>Log in to your HRM Pro account to view and download it.</p>
+                  <a href="${clientURL}/payroll"
+                     style="display:inline-block;padding:12px 24px;background:#1a56db;
+                            color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;">
+                      View My Payslip
+                  </a>
+                  <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+                  <p style="color:#9ca3af;font-size:12px;">HRM Pro — Human Resource Management System</p>
+                </div>
+            `,
+        });
+    }
 }
 
 // exporting with singleton design pattern
+// because of the transporter
 module.exports = new EmailService();
