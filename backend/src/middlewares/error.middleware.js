@@ -1,4 +1,4 @@
-// use use strict mode
+// use strict mode
 "use strict"
 
 const { AppError } = require("../utils/helpers");

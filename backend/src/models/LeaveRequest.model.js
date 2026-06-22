@@ -1,5 +1,5 @@
 // use strict mode
-"use strict";
+"use strict"
 
 // requires
 const mongoose = require("mongoose");

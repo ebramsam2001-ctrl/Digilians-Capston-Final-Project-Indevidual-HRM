@@ -1,4 +1,4 @@
-// use use strict mode
+// use strict mode
 "use strict"
 
 const { encode } = require("html-entities");

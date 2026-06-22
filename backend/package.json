@@ -19,6 +19,7 @@
     "mongoose": "^9.6.2",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
+    "node-cron": "^4.5.0",
     "node-dns": "^0.1.0",
     "nodemailer": "^9.0.1",
     "pdfkit": "^0.19.1",

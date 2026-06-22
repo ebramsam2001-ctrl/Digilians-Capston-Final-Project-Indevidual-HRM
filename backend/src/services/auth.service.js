@@ -1,8 +1,8 @@
-// use use strict mode
+// use strict mode
 "use strict"
 
 // requires
-// Libraries
+// libraries
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 
@@ -249,7 +249,6 @@ const resetPassword = async (rawToken, newPassword) => {
     // delete all refresh tokens
     await RefreshToken.deleteMany({ userId: user._id });
 };
-
 
 // get the current logged in user's profile
 const getMe = async (userId) => {

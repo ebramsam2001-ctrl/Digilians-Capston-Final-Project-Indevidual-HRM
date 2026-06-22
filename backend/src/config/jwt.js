@@ -1,5 +1,5 @@
-// strict mood
-"use strict";
+// use strict mode
+"use strict"
 
 const jwtConfig = {
     // json web token Access key secret and expires

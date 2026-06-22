@@ -1,4 +1,4 @@
-// use use strict mode
+// use strict mode
 "use strict"
 
 // safty point for Async controllers and if there are any error go to global error handler

@@ -1,5 +1,5 @@
-// strict mood
-"use strict";
+// use strict mode
+"use strict"
 
 // mangoose
 const mongoose = require("mongoose");
