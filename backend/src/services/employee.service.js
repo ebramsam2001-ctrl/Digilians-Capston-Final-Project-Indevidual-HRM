@@ -11,13 +11,14 @@ const User = require("../models/User.model");
 
 // services
 const emailService = require("./email.service");
+const auditService = require("./audit.service");
 
 // utils
 const { AppError } = require("../utils/helpers");
 
 // functions
 // generate employee code
-const generateEmployeeCode = async() => {
+const generateEmployeeCode = async () => {
     // get the employee count
     const count = await Employee.countDocuments();
 
@@ -29,7 +30,7 @@ const generateEmployeeCode = async() => {
 };
 
 // create employee
-const createEmployee = async (data, createdBy) => {
+const createEmployee = async (data, createdBy, ipAddress, userAgent) => {
     // Destructuring the data
     const {
         email,
@@ -91,6 +92,23 @@ const createEmployee = async (data, createdBy) => {
             console.warn(`[EMAIL] Failed to send welcome email to ${email}`);
         }
 
+        // use audit service
+        await auditService.log({
+            actorId: createdBy,
+            action: "EMPLOYEE_CREATED",
+            resource: "Employee",
+            resourceId: employee._id,
+            changes: {
+                email: email,
+                firstName: firstName,
+                lastName: lastName,
+                department: department,
+                jobTitle: jobTitle,
+            },
+            ipAddress: ipAddress,
+            userAgent: userAgent,
+        });
+
         // return
         return { user, employee };
     } catch (error) {
@@ -112,22 +130,22 @@ const listEmployees = async ({ page = 1, limit = 10, search, department, status 
     const query = {};
 
     // check if search is defind
-    if(search) {
+    if (search) {
         // add to (query object) search
         // $ -> for (Full-Text Search Engine) in mongoDB
         query.$text = { $search: search };
     }
 
     // check if department is defind
-    if(department) {
+    if (department) {
         // add to (query object) search
         query.department = department;
     }
 
     // check if status is defind
-    if(status) {
+    if (status) {
         // add to (query object) search
-        query.department = status;
+        query.employmentStatus = status;
     }
 
     // paginatin
@@ -141,10 +159,10 @@ const listEmployees = async ({ page = 1, limit = 10, search, department, status 
     const [employees, total] = await Promise.all([
         // get employees
         Employee.find(query)
-                .populate("userId", "email role accountStatus lastLoginAt")
-                .sort({ createdAt: -1 }) // Desending
-                .skip(skip)
-                .limit(take),
+            .populate("userId", "email role accountStatus lastLoginAt")
+            .sort({ createdAt: -1 }) // Desending
+            .skip(skip)
+            .limit(take),
         // employee count
         Employee.countDocuments(query),
     ]);
@@ -165,10 +183,10 @@ const listEmployees = async ({ page = 1, limit = 10, search, department, status 
 const getEmployeeById = async (id) => {
     // get the employee by ID
     const employee = await Employee.findById(id)
-                                   .populate("userId", "email role accountStatus lastLoginAt");
-    
+        .populate("userId", "email role accountStatus lastLoginAt isEmailVerified");
+
     // check if the employee not found
-    if(!employee) {
+    if (!employee) {
         // throw error
         throw new AppError(`Employee not found.`, 404);
     }
@@ -193,43 +211,64 @@ const UPDATABLE_FIELDS = [
 ];
 
 // update employee data
-const updateEmployee = async (id, data, photoFileName) => {
+const updateEmployee = async (id, data, photoFileName, actorId, ipAddress, userAgent) => {
     // get employee by ID
     const employee = await Employee.findById(id);
 
     // check if employee not found
-    if(!employee) {
+    if (!employee) {
         // throw error
         throw new AppError(`Employee not found.`, 404);
     }
 
+    const before = {};
+    const after = {};
+
     // update updatable fields only (ignore else)
     UPDATABLE_FIELDS.forEach(field => {
-        if(data[field] !== undefined) {
+        if (data[field] !== undefined) {
+            before[field] = employee[field];
             employee[field] = data[field];
+            after[field] = data[field];
         }
     });
 
     // update the photo if a new photo uploded (with multer)
     // check if photo is defined
-    if(photoFileName) {
+    if (photoFileName) {
+        before.photoFileName = employee.photoFileName;
         employee.photoFileName = photoFileName;
+        after.photoFileName = photoFileName;
     }
 
     // save to database
     await employee.save();
+
+    // use audit service
+    await auditService.log({
+        actorId: actorId,
+        action: "EMPLOYEE_UPDATED",
+        resource: "Employee",
+        resourceId: employee._id,
+        changes: {
+            before: before,
+            after: after,
+        },
+        ipAddress: ipAddress,
+        userAgent: userAgent,
+    });
 
     // return
     return employee;
 };
 
 // delete employee (Soft delete)
-const deleteEmployee = async (id) => {
+const deleteEmployee = async (id, actorId, ipAddress, userAgent) => {
     // get employee by ID
     const employee = await Employee.findById(id);
 
     // check if the employee not found
-    if(!employee) {
+    if (!employee) {
         // throw error
         throw new AppError(`Employee not found.`, 404);
     }
@@ -243,6 +282,20 @@ const deleteEmployee = async (id) => {
     // make the user can not login
     // change the account status to "suspended"
     await User.findByIdAndUpdate(employee.userId, { accountStatus: "suspended" });
+
+    // use audite service
+    await auditService.log({
+        actorId: actorId,
+        action: "EMPLOYEE_DELETED",
+        resource: "Employee",
+        resourceId: employee._id,
+        changes: {
+            employmentStatus: "terminated",
+            userAccountStatus: "suspended",
+        },
+        ipAddress: ipAddress,
+        userAgent: userAgent,
+    });
 
     // return
     return employee;

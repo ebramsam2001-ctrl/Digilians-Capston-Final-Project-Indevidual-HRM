@@ -22,6 +22,8 @@ const notificationSchema = new mongoose.Schema({
                 `payslip_available`,
                 `late_alert`,
                 `absent_alert`,
+                `employee_created`,
+                `employee_updated`,
                 `system`,
             ],
             message: `Invalid notification type.`,
@@ -53,10 +55,10 @@ notificationSchema.index({
     createdAt: -1, // descending
 });
 
-// auto delete notifications older than 90 TTL
+// Auto-delete notifications older than 90 days (TTL)
 notificationSchema.index(
     { createdAt: 1 },
-    { expireAfterSeconds: 90 * 24 * 60 * 60 },
+    { expireAfterSeconds: 90 * 24 * 60 * 60 }, // 90 days
 );
 
 // make the model

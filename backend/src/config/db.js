@@ -1,7 +1,8 @@
 // use strict mode
 "use strict"
 
-// mangoose
+// requires
+// libraries
 const mongoose = require("mongoose");
 
 // in dev mood we want to get the error quickly

@@ -11,11 +11,9 @@ const roleGuard = require("../middlewares/roleguard.middleware");
 
 // controllers
 const {
-    runPayroll,
-    listPayroll,
-    getPayrollRecord,
-    downloadPayslip,
-} = require("../controllers/payroll.controller");
+    downloadDocument,
+    deleteDocument,
+} = require("../controllers/document.controller");
 
 // make the router
 const router = Router();
@@ -23,10 +21,11 @@ const router = Router();
 // router auth middleware
 router.use(authMiddleware);
 
-router.post("/run", roleGuard("hr_admin", "super_admin"), runPayroll);
-router.get("/", listPayroll);
-router.get("/:id", getPayrollRecord);
-router.get("/:id/pdf", downloadPayslip);
+// Download — available to the employee it belongs to and HR (ownership check is in the service)
+router.get("/:id/download", downloadDocument);
+
+// Delete — HR Admin only
+router.delete("/:id", roleGuard("hr_admin", "super_admin"), deleteDocument);
 
 // exporting
 module.exports = router;

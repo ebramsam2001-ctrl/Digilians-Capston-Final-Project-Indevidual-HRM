@@ -12,8 +12,11 @@ const settingsSchema = new mongoose.Schema({
         required: [true, `companyName is required`],
         trim: true,
         maxlength: [150, `companyName must be 150 characters or less.`],
+        default: `HRM Pro Organisation`,
     },
+
     // attendance rules
+    // HH:MM — the official start of the working day
     standardStartTime: {
         type: String,
         default: `09:00`,
@@ -25,6 +28,8 @@ const settingsSchema = new mongoose.Schema({
         min: [1, `standardHoursPerDay must be at least 1.`],
         max: [24, `standardHoursPerDay must be 24 or less.`],
     },
+
+    // Minutes after standardStartTime before an employee is considered "late"
     graceMinutes: {
         type: Number,
         default: 15,
@@ -62,6 +67,7 @@ const settingsSchema = new mongoose.Schema({
     companyAddress: {
         type: String,
         trim: true,
+        maxlength: [300, "companyAddress must be 300 characters or fewer."],
         default: null,
     },
 }, { timestamps: true });

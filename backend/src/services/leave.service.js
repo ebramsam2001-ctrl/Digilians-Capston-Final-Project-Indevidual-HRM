@@ -10,6 +10,9 @@ const LeaveRequest = require("../models/LeaveRequest.model");
 const Employee = require("../models/Employee.model");
 const Attendance = require("../models/Attendance.model");
 
+// services
+const auditService = require("./audit.service");
+
 // utils
 const { AppError } = require("../utils/helpers");
 
@@ -19,7 +22,7 @@ const { AppError } = require("../utils/helpers");
 const countBusinessDays = (start, end) => {
     // count of Business days
     let count = 0;
-    
+
     // get start and end time of date from 00:00:00 to 23:59:59:999
     const current = new Date(start);
     current.setUTCHours(0, 0, 0, 0);
@@ -28,11 +31,11 @@ const countBusinessDays = (start, end) => {
     endDate.setUTCHours(23, 59, 59, 999);
 
     // iterate from current to end date to check weekend days
-    while(current <= endDate) {
+    while (current <= endDate) {
         const day = current.getUTCDay(); // 0 = sunday | 6 = saturday
 
         // check if day not (saturday, sunday)
-        if(day !== 0 && day !== 6) {
+        if (day !== 0 && day !== 6) {
             count++;
         }
 
@@ -46,18 +49,18 @@ const countBusinessDays = (start, end) => {
 
 // submit leave
 // set to database the vacation days
-const submitLeave = async (employeeId, { leaveType, startDate, endDate, reason }) => {
+const submitLeave = async (employeeId, { leaveType, startDate, endDate, reason }, actorId) => {
     // get employee by ID
     const employee = await Employee.findById(employeeId);
 
     // check if employee not exist
-    if(!employee) {
+    if (!employee) {
         // throw error
         throw new AppError(`Employee not found.`, 404);
     }
 
     // check if he is active
-    if(employee.employmentStatus !== "active") {
+    if (employee.employmentStatus !== "active") {
         // throw error
         throw new AppError(`employees is not active`, 403);
     }
@@ -67,7 +70,7 @@ const submitLeave = async (employeeId, { leaveType, startDate, endDate, reason }
     const end = new Date(endDate);
 
     // check if "end" not before "start"
-    if(end < start) {
+    if (end < start) {
         // throw error
         throw new AppError(`Dates error`, 400);
     }
@@ -76,7 +79,7 @@ const submitLeave = async (employeeId, { leaveType, startDate, endDate, reason }
     const durationDays = countBusinessDays(start, end);
 
     // check if duration days < 1
-    if(durationDays < 1) {
+    if (durationDays < 1) {
         // throw error
         throw new AppError(`Leave must include at least 1 business day.`, 400);
     }
@@ -84,7 +87,7 @@ const submitLeave = async (employeeId, { leaveType, startDate, endDate, reason }
     // check leave creadit
     // are there enough vacation days left?
     // for annual
-    if(leaveType === "annual" && employee.leaveBalance.annual < durationDays) {
+    if (leaveType === "annual" && employee.leaveBalance.annual < durationDays) {
         // throw error
         throw new AppError(
             `Insufficient annual leave balance. Available: ${employee.leaveBalance.annual} day(s).`,
@@ -92,8 +95,8 @@ const submitLeave = async (employeeId, { leaveType, startDate, endDate, reason }
         );
     }
 
-    // for annual
-    if(leaveType === "sick" && employee.leaveBalance.sick < durationDays) {
+    // for sick
+    if (leaveType === "sick" && employee.leaveBalance.sick < durationDays) {
         // throw error
         throw new AppError(
             `Insufficient sick leave balance. Available: ${employee.leaveBalance.sick} day(s).`,
@@ -104,17 +107,17 @@ const submitLeave = async (employeeId, { leaveType, startDate, endDate, reason }
     // check for overlaping in preavious requistes
     const overlap = await LeaveRequest.findOne({
         employeeId: employeeId,
-        status: { $in: [ "pending", "approved" ] },
+        status: { $in: ["pending", "approved"] },
         startDate: { $lte: end },
         endDate: { $gte: start },
     });
 
     // check if overlaped
-    if(overlap) {
+    if (overlap) {
         // throw error
         throw new AppError(`You already have a leave request that overlaps with these dates.`, 409);
     }
-    
+
     // request creation
     const request = await LeaveRequest.create({
         employeeId: employeeId,
@@ -123,6 +126,20 @@ const submitLeave = async (employeeId, { leaveType, startDate, endDate, reason }
         endDate: end,
         durationDays: durationDays,
         reason: reason || null,
+    });
+
+    // use audit service
+    await auditService.log({
+        actorIdactorId,
+        action: "LEAVE_SUBMITTED",
+        resource: "LeaveRequest",
+        resourceId: request._id,
+        changes: {
+            leaveType: leaveType,
+            startDate: startDate,
+            endDate: endDate,
+            durationDays: durationDays,
+        },
     });
 
     // return
@@ -136,14 +153,14 @@ const listLeaves = async ({ role, employeeId, status, page = 1, limit = 20 }) =>
     const query = {};
 
     // check the role
-    if(role === "employee") { // for employees
+    if (role === "employee") { // for employees
         query.employeeId = employeeId;
-    } else if(employeeId) { // for HR to get spicific employee leaves
+    } else if (employeeId) { // for HR to get spicific employee leaves
         query.employeeId = employeeId;
     }
 
     // check if status define
-    if(status) {
+    if (status) {
         query.status = status;
     }
 
@@ -153,12 +170,12 @@ const listLeaves = async ({ role, employeeId, status, page = 1, limit = 20 }) =>
     // make more than one query in the same time
     const [requests, total] = await Promise.all([
         LeaveRequest.find(query)
-                    .populate("employeeId", "firstName lastName employeeCode department")
-                    .populate("reviewedBy", "email")
-                    .sort({ createdAt: -1 }) // Desending
-                    .skip(skip)
-                    .limit(parseInt(limit)), 
-        // employee count
+            .populate("employeeId", "firstName lastName employeeCode department")
+            .populate("reviewedBy", "email")
+            .sort({ createdAt: -1 }) // Desending
+            .skip(skip)
+            .limit(parseInt(limit)),
+        // requestes count
         LeaveRequest.countDocuments(query),
     ]);
 
@@ -177,7 +194,7 @@ const listLeaves = async ({ role, employeeId, status, page = 1, limit = 20 }) =>
 // Deducting vacation balance,
 // updating application status,
 // and modifying employee attendance and departure schedule
-const approveLeave = async (leaveId, reviewerUserId) => {
+const approveLeave = async (leaveId, reviewerUserId, ipAddress, userAgent) => {
     // make (MongoDB Transactions)
     // to make (All or Nothing) can not make 1 operation without another operation 
 
@@ -191,36 +208,36 @@ const approveLeave = async (leaveId, reviewerUserId) => {
         const request = await LeaveRequest.findById(leaveId).session(session);
 
         // check if leave not exist
-        if(!request) {
+        if (!request) {
             // throw error
             throw new AppError(`Leave request not found.`, 404);
         }
 
         // check if leave status is not pending
-        if(request.status !== "pending") {
+        if (request.status !== "pending") {
             // throw error
             throw new AppError(`Cannot approve a request`, 400);
         }
 
         // get the employee to make self-Approval Prevention
         // make it when the transaction is over
-        const employee = await Employee.findById(request.employeeId).session(sessoin);
+        const employee = await Employee.findById(request.employeeId).session(session);
 
         // check if employee is not exist
-        if(!employee) {
+        if (!employee) {
             // throw error
             throw new AppError(`Employee not found.`, 404);
         }
 
         // check if employee Id != reviewerId
-        if(employee.userId.toString() === reviewerUserId.toString()) {
+        if (employee.userId.toString() === reviewerUserId.toString()) {
             // throw error
             throw new AppError(`You cannot approve your own leave request.`, 403);
         }
 
         // leave balance (only for "annual" and "sick")
         // this for deducting from vacation balance
-        if(["annual", "sick"].includes(request.leaveType)) {
+        if (["annual", "sick"].includes(request.leaveType)) {
             // make (eg. "leaveBalance.annual")
             const balanceField = `leaveBalance.${request.leaveType}`;
 
@@ -238,7 +255,7 @@ const approveLeave = async (leaveId, reviewerUserId) => {
             );
 
             // check if employee Insufficient to take this leave
-            if(!update) {
+            if (!update) {
                 // throw error
                 throw new AppError(`Insufficient leave balance at time of approval.`, 400);
             }
@@ -248,7 +265,7 @@ const approveLeave = async (leaveId, reviewerUserId) => {
         request.status = "approved";
         request.reviewedBy = reviewerUserId;
         request.reviewedAt = new Date();
-        
+
         // saveing
         await request.save({ session: session });
 
@@ -257,12 +274,12 @@ const approveLeave = async (leaveId, reviewerUserId) => {
         const end = new Date(request.endDate);
 
         // change the status in the dayes of leave to "on_leave" (ignor the weekend days)
-        while(current <= end) {
+        while (current <= end) {
             // get the day
             const day = current.getUTCDay();
 
             // skip weekends (0 = sunday | 6 = saturday)
-            if(day !== 0 && day !== 6) {
+            if (day !== 0 && day !== 6) {
                 // get date
                 const dayStart = new Date(Date.UTC(
                     current.getUTCFullYear(),
@@ -291,6 +308,21 @@ const approveLeave = async (leaveId, reviewerUserId) => {
         // commit session and make the transaction
         await session.commitTransaction();
 
+        // use audit service
+        await auditService.log({
+            actorId: reviewerUserId,
+            action: "LEAVE_APPROVED",
+            resource: "LeaveRequest",
+            resourceId: request._id,
+            changes: {
+                employeeId: request.employeeId,
+                leaveType: request.leaveType,
+                durationDays: request.durationDays,
+            },
+            ipAddress: ipAddress,
+            userAgent: userAgent,
+        });
+
         // return
         return request;
     } catch (error) {
@@ -306,18 +338,18 @@ const approveLeave = async (leaveId, reviewerUserId) => {
 };
 
 // reject leave
-const rejectLeave = async (leaveId, reviewerUserId, reviewNote) => {
+const rejectLeave = async (leaveId, reviewerUserId, reviewNote, ipAddress, userAgent) => {
     // get the request by ID
     const request = await LeaveRequest.findById(leaveId);
 
     // check if request is not exist
-    if(!request) {
+    if (!request) {
         // throw error
         throw new AppError(`Leave request not found.`, 404);
     }
 
     // check if leave status is not pending
-    if(request.status !== "pending") {
+    if (request.status !== "pending") {
         // throw error
         throw new AppError(`Cannot reject a request`, 400);
     }
@@ -331,29 +363,40 @@ const rejectLeave = async (leaveId, reviewerUserId, reviewNote) => {
     // saving
     await request.save();
 
+    // use audit service
+    await auditService.log({
+        actorId: reviewerUserId,
+        action: "LEAVE_REJECTED",
+        resource: "LeaveRequest",
+        resourceId: request._id,
+        changes: { rejectionReason: reviewNote },
+        ipAddress: ipAddress,
+        userAgent: userAgent,
+    });
+
     // return
     return request;
 };
 
 // cancel leave (employee cancels their own pending request)
-const cancelLeave = async (leaveId, employeeId) => {
+const cancelLeave = async (leaveId, employeeId, actorId) => {
     // get the request by ID
     const request = await LeaveRequest.findById(leaveId);
 
     // check if request is not existing
-    if(!request) {
+    if (!request) {
         // throw error
         throw new AppError(`Leave request not found.`, 404);
     }
 
     // check if the employee ID != request sender ID
-    if(request.employeeId.toString() !== employeeId.toString()) {
+    if (request.employeeId.toString() !== employeeId.toString()) {
         // throw error
         throw new AppError(`You can only cancel your own leave requests.`, 403);
     }
 
     // check if leave status is not pending
-    if(request.status !== "pending") {
+    if (request.status !== "pending") {
         // throw error
         throw new AppError(`Only pending requests can be cancelled.`, 400);
     }
@@ -363,6 +406,13 @@ const cancelLeave = async (leaveId, employeeId) => {
 
     // saving
     await request.save();
+
+    await auditService.log({
+        actorId: actorId,
+        action: "LEAVE_CANCELLED",
+        resource: "LeaveRequest",
+        resourceId: request._id,
+    });
 
     // return
     return request;

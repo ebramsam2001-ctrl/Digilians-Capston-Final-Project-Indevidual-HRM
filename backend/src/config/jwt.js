@@ -18,6 +18,7 @@ const jwtConfig = {
 
 // check if access and refresh secret key had get from ".env"
 if(!jwtConfig.access.secret || !jwtConfig.refresh.secret) {
+    // throw error
     throw new Error(`JWT secrets must be set in .env`);
 }
 

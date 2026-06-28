@@ -2,9 +2,12 @@
 "use strict"
 
 // requires
+// models
+const User = require("../models/User.model");
+
+// utils
 const { verifyAccessToken } = require("../utils/tokenUtils");
 const { AppError } = require("../utils/helpers");
-const User = require("../models/User.model");
 
 // auth middleware
 const authMiddleware = async (req, res, next) => {
@@ -16,17 +19,17 @@ const authMiddleware = async (req, res, next) => {
         const authHeader = req.headers.authorization;
 
         // check if token sended and if it Bearer token
-        if(authHeader && authHeader.startsWith("Bearer ")) {
+        if (authHeader && authHeader.startsWith("Bearer ")) {
             token = authHeader.split(" ")[1]; // get the token only
         }
 
         // check if token not send in authorization header get it from cookies
-        if(!token && req.cookies?.accessToken) {
+        if (!token && req.cookies?.accessToken) {
             token = req.cookies.accessToken; // get token from cookies
         }
 
         // check if no token provided
-        if(!token) {
+        if (!token) {
             return next(
                 new AppError(`Authentication required. No token provided.`, 401)
             );
@@ -37,24 +40,24 @@ const authMiddleware = async (req, res, next) => {
 
         // get the user data from database
         const user = await User.findById(userId)
-                               .select(`+passwordChangedAt +loginAttempts +lockUntil`);
-        
+            .select(`+passwordChangedAt +loginAttempts +lockUntil`);
+
         // check if user exist or not
-        if(!user) {
+        if (!user) {
             return next(
                 new AppError(`User no longer exists.`, 401)
             );
         }
 
         // check if account status suspended
-        if(user.accountStatus === "suspended") {
+        if (user.accountStatus === "suspended") {
             return next(
                 new AppError(`Account suspended. Contact HR.`, 403)
             );
         }
 
         // check if account status locked
-        if(user.accountStatus === "locked") {
+        if (user.accountStatus === "locked") {
             return next(
                 new AppError(`Account locked.`, 403)
             );
@@ -62,13 +65,13 @@ const authMiddleware = async (req, res, next) => {
 
         // for more security (if token stolen make it not accessable)
         // check if password changed
-        if(user.passwordChangedAt) {
+        if (user.passwordChangedAt) {
             // get time per sec
             const changedAtSec = Math.floor(user.passwordChangedAt.getTime() / 1000);
 
             // iat -> the time of token
             // if token maked befor changed password logout him
-            if(iat < changedAtSec) {
+            if (iat < changedAtSec) {
                 return next(
                     new AppError(`Password was changed. Please log in again.`, 401)
                 );
@@ -91,7 +94,7 @@ const authMiddleware = async (req, res, next) => {
                 new AppError(`Invalid token.`, 401)
             );
         }
-        
+
         // else throw error
         return next(error);
     }

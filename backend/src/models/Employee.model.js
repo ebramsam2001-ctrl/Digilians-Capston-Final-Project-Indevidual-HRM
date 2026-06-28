@@ -3,7 +3,6 @@
 
 // requires
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
 
 // mongoose schema
 const employeeSchema = new mongoose.Schema({
@@ -103,15 +102,11 @@ const employeeSchema = new mongoose.Schema({
 
 // make virtual field "fullname"
 employeeSchema.virtual(`fullName`) // field name
-              .get(function() {
-                return `${this.firstName} ${this.lastName}`;
-              });
+    .get(function () {
+        return `${this.firstName} ${this.lastName}`;
+    });
 
 // Improving search efficiency
-employeeSchema.index({
-    employeeCode: 1,
-});
-
 employeeSchema.index({
     department: 1, // Ascending
 });

@@ -10,25 +10,23 @@ const { body } = require("express-validator");
 const submitLeaveValidators = [
     // leaveType
     body("leaveType")
-        .notEmpty().withMessage(`leaveType is required.`)
-        .isIn([`annual`, `sick`, `unpaid`, `other`]).withMessage(`leaveType validation error`),
-    
+        .notEmpty().withMessage("leaveType is required.")
+        .isIn(["annual", "sick", "unpaid", "other"])
+        .withMessage("leaveType must be annual, sick, unpaid, or other."),
+
     // startDate
     body("startDate")
-        .notEmpty().withMessage(`startDate is required.`)
-        .isISO8601().withMessage(`startDate must be a valid date (YYYY-MM-DD).`)
+        .notEmpty().withMessage("startDate is required.")
+        .isISO8601().withMessage("startDate must be a valid date (YYYY-MM-DD).")
         .toDate(),
-    
+
     // endDate
     body("endDate")
-        .notEmpty().withMessage(`endDate is required.`)
-        .isISO8601().withMessage(`endDate must be a valid date (YYYY-MM-DD).`)
+        .notEmpty().withMessage("endDate is required.")
+        .isISO8601().withMessage("endDate must be a valid date (YYYY-MM-DD).")
         .toDate()
         .custom((endDate, { req }) => {
-            // endDate must not be before startDate
-            const start = new Date(req.body.startDate);
-
-            if (endDate < start) {
+            if (new Date(endDate) < new Date(req.body.startDate)) {
                 // throw error
                 throw new Error("endDate must be on or after startDate.");
             }
@@ -39,11 +37,21 @@ const submitLeaveValidators = [
     
     // reason
     body("reason")
-    .optional()
-    .isString().withMessage(`reason must be a string.`)
-    .trim()
-    .isLength({ max: 500 }).withMessage(`reason must be 500 characters or fewer.`),
+        .optional()
+        .isString().withMessage("reason must be a string.")
+        .trim()
+        .isLength({ max: 500 }).withMessage("reason must be 500 characters or fewer."),
+];
+
+// reject leave validators
+const rejectLeaveValidators = [
+    // reviewNote
+    body("reviewNote")
+        .optional()
+        .isString().withMessage("reviewNote must be a string.")
+        .trim()
+        .isLength({ max: 500 }).withMessage("reviewNote must be 500 characters or fewer."),
 ];
 
 // exporting
-module.exports = submitLeaveValidators;
+module.exports = { submitLeaveValidators, rejectLeaveValidators };

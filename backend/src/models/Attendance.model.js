@@ -51,10 +51,13 @@ const attendanceSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // ignore duplicate records per day
-attendanceSchema.index({employeeId: 1, data: 1,}, {unique: true});
+attendanceSchema.index({ employeeId: 1, data: 1, }, { unique: true });
+
+// monthly history queries for a single employee
+attendanceSchema.index({ employeeId: 1, date: -1 });
 
 // search by date and status
-attendanceSchema.index({data: 1, status: 1});
+attendanceSchema.index({ data: 1, status: 1 });
 
 // make the model
 const Attendance = mongoose.model("Attendance", attendanceSchema);

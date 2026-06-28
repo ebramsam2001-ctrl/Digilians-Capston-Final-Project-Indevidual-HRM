@@ -5,7 +5,10 @@ const { AppError } = require("../utils/helpers");
 
 // not found api
 const notFound = (req, res, next) => {
+    // error making
     const error = new AppError(`Not Found - Cannot find ${req.originalUrl} on this server`, 404);
+
+    // go to global error handler
     next(error);
 };
 

@@ -136,7 +136,7 @@ const deleteNotification = async (notificationId, userId) => {
     await notification.deleteOne();
 
     // return
-    return { deleted: true, };
+    return { deleted: true };
 };
 
 // exporting

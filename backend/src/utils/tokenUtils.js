@@ -7,7 +7,9 @@ const jwtConfig = require("../config/jwt");
 
 // jwt
 // sign token
+// sign access token
 const signAccessToken = (userId, role) => {
+    // return
     return jwt.sign(
         {
             userId: userId,
@@ -21,6 +23,7 @@ const signAccessToken = (userId, role) => {
     );
 };
 
+// sign refresh token
 const signRefreshToken = (userId) => {
     return jwt.sign(
         {
@@ -35,6 +38,7 @@ const signRefreshToken = (userId) => {
 };
 
 // verify token
+// verify access token
 const verifyAccessToken = (token) => {
     return jwt.verify(
         token,
@@ -45,15 +49,19 @@ const verifyAccessToken = (token) => {
     );
 };
 
+// verify refresh token
 const verifyRefreshToken = (token) => {
     return jwt.verify(
         token,
         jwtConfig.refresh.secret,
-        {
-            algorithms: [jwtConfig.algorithm],
-        },
+        { algorithms: [jwtConfig.algorithm] },
     );
 };
 
 // exporting
-module.exports = { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken };
+module.exports = {
+    signAccessToken,
+    signRefreshToken,
+    verifyAccessToken,
+    verifyRefreshToken,
+};

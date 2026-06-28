@@ -3,7 +3,7 @@
 
 // requires
 // libraries
-const mongoose = require("mongoose");
+// const mongoose = require("mongoose");
 
 // models
 const Employee = require("../models/Employee.model");
@@ -12,19 +12,6 @@ const LeaveRequest = require("../models/LeaveRequest.model");
 const Payroll = require("../models/Payroll.model");
 
 // functions
-// month range
-const monthRange = (yyyyMM) => {
-    // split and get year and month
-    const [year, month] = yyyyMM.split("-").map(Number); // transfer the data to numbers
-
-    // get the range
-    const start = new Date(Date.UTC(year, (month - 1), 1)); // first day always
-    const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 99)); // the last second of the day
-
-    // return
-    return { start, end };
-};
-
 // executive HR analytics dashboard
 const getSummary = async () => {
     // run more than one aggregations in parallel
@@ -135,14 +122,14 @@ const getAttendanceReport = async (startDate, endDate) => {
                 ],
 
                 // average late minutes among late records
-                avgLate: [
+                lateStats: [
                     { $match: { status: "late" } },
                     {
                         $group: {
                             _id: null,
                             avgLateMinutes: { $avg: "$lateMinutes" },
                             totalLateMinutes: { $sum: "$lateMinutes" },
-                        },
+                        }
                     },
                 ],
             },
@@ -166,7 +153,9 @@ const getLeaveReport = async (month) => {
     // build date range
     const now = new Date();
     const yyyyMM = month || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-    const { start, end } = monthRange(yyyyMM);
+    const [year, m] = yyyyMM.split("-").map(Number);
+    const start = new Date(Date.UTC(year, m - 1, 1));
+    const end = new Date(Date.UTC(year, m, 0, 23, 59, 59, 999));
 
     // get the data
     const [result] = await LeaveRequest.aggregate([
@@ -246,8 +235,7 @@ const getLeaveReport = async (month) => {
 };
 
 // get payroll report
-const getPayrollReport = async () => {
-    // default to current month
+const getPayrollReport = async (month) => {
     const now = new Date();
     const yyyyMM = month || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 
@@ -255,7 +243,6 @@ const getPayrollReport = async () => {
         { $match: { month: yyyyMM } },
         {
             $facet: {
-                // totals for the month
                 totals: [
                     {
                         $group: {
@@ -266,18 +253,16 @@ const getPayrollReport = async () => {
                             totalAbsenceDeductions: { $sum: "$absenceDeduction" },
                             totalBonuses: { $sum: "$bonus" },
                             totalNetSalary: { $sum: "$netSalary" },
-                        },
+                        }
                     },
                 ],
-
-                // breakdown by status
                 byStatus: [
                     {
                         $group: {
                             _id: "$status",
                             count: { $sum: 1 },
-                        },
-                    },
+                        }
+                    }
                 ],
             },
         },
@@ -286,50 +271,35 @@ const getPayrollReport = async () => {
     // return
     return {
         month: yyyyMM,
-        totals: result.totals[0] || {
-            employeeCount: 0,
-            totalBasicSalary: 0,
-            totalLateDeductions: 0,
-            totalAbsenceDeductions: 0,
-            totalBonuses: 0,
-            totalNetSalary: 0,
-        },
+        totals: result.totals[0] || { employeeCount: 0, totalBasicSalary: 0, totalNetSalary: 0 },
         byStatus: result.byStatus,
     };
 };
 
 // export the data
 const getExportData = async ({ type, month, startDate, endDate }) => {
+    const now = new Date();
+    const yyyyMM = month || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+
     // if type = "attendance"
-    if(type === "attendance") {
-        // get the range
-        const start = new Date(startDate || `${month}-01`);
-        const end = endDate ?
-                    new Date(endDate) :
-                    monthRange(
-                        month ||
-                        `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}`
-                    ).end;
+    if (type === "attendance") {
+        const [year, m] = yyyyMM.split("-").map(Number);
+        const start = startDate ? new Date(startDate) : new Date(Date.UTC(year, m - 1, 1));
+        const end = endDate ? new Date(endDate) : new Date(Date.UTC(year, m, 0, 23, 59, 59, 999));
 
-        // get the records
-        const records = await Attendance.find({
-            date: {
-                $gte: start,
-                $lte: end,
-            },
-        }).populate("employeeId", "firstName lastName employeeCode department")
-          .sort({ data: 1 })
-          .lean();
+        const records = await Attendance.find({ date: { $gte: start, $lte: end } })
+            .populate("employeeId", "firstName lastName employeeCode department")
+            .sort({ date: 1 })
+            .lean();
 
-        // return
         return records.map(record => ({
             date: record.date?.toISOString().split("T")[0],
             employeeCode: record.employeeId?.employeeCode,
             employeeName: `${record.employeeId?.firstName} ${record.employeeId?.lastName}`,
             department: record.employeeId?.department,
             status: record.status,
-            checkIn: record.checkIn ? record.checkIn.toISOString() : null,
-            checkOut: record.checkOut ? record.checkOut.toISOString() : null,
+            checkIn: record.checkIn?.toISOString() || null,
+            checkOut: record.checkOut?.toISOString() || null,
             workedMinutes: record.workedMinutes,
             lateMinutes: record.lateMinutes,
         }));
@@ -337,20 +307,15 @@ const getExportData = async ({ type, month, startDate, endDate }) => {
 
     // if type = "leave"
     if (type === "leave") {
-        // get the month range
-        const now = new Date();
-        const yyyyMM = month || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-        const { start, end } = monthRange(yyyyMM);
+        const [year, m] = yyyyMM.split("-").map(Number);
+        const start = new Date(Date.UTC(year, m - 1, 1));
+        const end = new Date(Date.UTC(year, m, 0, 23, 59, 59, 999));
 
-        // get the records
-        const requests = await LeaveRequest.find({
-            startDate: { $lte: end },
-            endDate:   { $gte: start },
-        }).populate("employeeId", "firstName lastName employeeCode department")
-          .populate("reviewedBy", "email")
-          .lean();
+        const requests = await LeaveRequest.find({ startDate: { $lte: end }, endDate: { $gte: start } })
+            .populate("employeeId", "firstName lastName employeeCode department")
+            .populate("reviewedBy", "email")
+            .lean();
 
-        // return
         return requests.map(record => ({
             employeeCode: record.employeeId?.employeeCode,
             employeeName: `${record.employeeId?.firstName} ${record.employeeId?.lastName}`,
@@ -362,22 +327,15 @@ const getExportData = async ({ type, month, startDate, endDate }) => {
             status: record.status,
             reason: record.reason || "",
             reviewedBy: record.reviewedBy?.email || "",
-            reviewedAt: record.reviewedAt?.toISOString().split("T")[0] || "",
         }));
     }
 
     // if type = "payroll"
     if (type === "payroll") {
-        // get the month
-        const now = new Date();
-        const yyyyMM = month || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-
-        // get the payrolls
         const payrolls = await Payroll.find({ month: yyyyMM })
             .populate("employeeId", "firstName lastName employeeCode department jobTitle")
             .lean();
 
-        // return
         return payrolls.map(payroll => ({
             employeeCode: payroll.employeeId?.employeeCode,
             employeeName: `${payroll.employeeId?.firstName} ${payroll.employeeId?.lastName}`,
@@ -391,8 +349,8 @@ const getExportData = async ({ type, month, startDate, endDate }) => {
             netSalary: payroll.netSalary,
             status: payroll.status,
             presentDays: payroll.breakdown?.presentDays || 0,
-            absentDays: payroll.breakdown?.absentDays  || 0,
-            lateDays: payroll.breakdown?.lateDays    || 0,
+            absentDays: payroll.breakdown?.absentDays || 0,
+            lateDays: payroll.breakdown?.lateDays || 0,
         }));
     }
 

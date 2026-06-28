@@ -2,64 +2,100 @@
 "use strict"
 
 // requires
-const multer = require("multer");
+// libraries
+// const fs = require("fs");
 const path = require("path");
-const fs = require("fs");
+const multer = require("multer");
+const crypto = require("crypto");
 
+// utils
 const { AppError } = require("../utils/helpers");
 
-// path of the folder of photos
-const uploadDir = path.join(__dirname, "../uploads/photos");
+// functions
+// helper
+const randomFilename = (ext) => {
+    const result = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${ext}`;;
 
-// check if the folder not exist create it
-if(!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });  // to make all folders in the path
-}
-
-// store the file in the disk (Not RAM)
-const storage = multer.diskStorage({
-    // determine folder destination
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    // file name
-    filename: (req, file, cb) => {
-        const extintion = path.extname(file.originalname).toLowerCase();
-        const userId = req.userId || "unknown";
-        const fileName = `${userId}-${Date.now()}${extintion}`;
-
-        cb(null, fileName);
-    },
-});
-
-// make white list for photos only
-const allowedMIMETypes = ["image/jpeg", "image/png", "image/webp"];
-
-// filter files
-const fileFilter = (req, file, cb) => {
-    // check if file type in the white list
-    if(allowedMIMETypes.includes(file.mimetype)) {
-        cb(null, true);
-    } else {
-        cb(
-            new AppError(`Invalid file type. Only JPEG, PNG, and WebP images are allowed.`, 415),
-            false
-        );
-    }
+    return result;
 };
 
-// make maxmum size of photo (make it 2Mb)
-const maxSize = parseInt(process.env.MAX_FILE_SIZE, 10) || (2 * 1024 * 1024); // 10 -> Base 10 (decimal system)
-
-// define the file properties
-const upload = multer({
-    storage: storage,
-    fileFilter: fileFilter,
-    limits: { fileSize: maxSize },
+// photo
+// photo storage
+const photoStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, path.join(__dirname, "../../uploads/photos"));
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, randomFilename(ext));
+    },
 });
 
-// make it take one photo
-const uploadPhoto = upload.single("photo");
+// photo filter
+const photoFilter = (req, file, cb) => {
+    // white list
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.mimetype)) {
+        return cb(
+            new AppError(`Only JPEG, PNG, and WebP images are allowed.`, 400),
+            false,
+        );
+    }
+
+    cb(null, true);
+};
+
+// photo upload
+const photoUpload = multer({
+    storage: photoStorage,
+    fileFilter: photoFilter,
+    limits: {
+        fileSize: parseInt(process.env.MAX_FILE_SIZE) || 2 * 1024 * 1024,
+        files: 1,
+    },
+});
+
+// document
+// document storage
+const documentStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, path.join(__dirname, "../../uploads/documents"));
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, randomFilename(ext));
+    },
+});
+
+// document filter
+const documentFilter = (req, file, cb) => {
+    // white list
+    const allowed = [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (!allowed.includes(file.mimetype)) {
+        return cb(
+            new AppError(`Only PDF, JPEG, PNG, DOC, and DOCX files are allowed.`, 400),
+            false,
+        );
+    }
+
+    cb(null, true);
+};
+
+// document upload
+const documentUpload = multer({
+    storage: documentStorage,
+    fileFilter: documentFilter,
+    limits: {
+        fileSize: 10 * 1024 * 1024,
+        files: 1,
+    },
+});
 
 // exporting
-module.exports = { uploadPhoto, uploadDir };
+module.exports = { photoUpload, documentUpload, };

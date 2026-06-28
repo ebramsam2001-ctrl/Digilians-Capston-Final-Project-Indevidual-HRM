@@ -22,16 +22,22 @@ class AppError extends Error {
 const sendSuccess = (res, data, message = "Success", code = 200) => {
     return res.status(code).json({
         success: true,
-        message,
-        data,
+        message: message,
+        data: data,
     });
 };
 
 const sendError = (res, message, code = 400) => {
     return res.status(code).json({
         success: false,
-        message,
+        message: message,
     });
 };
 
-module.exports = { asyncHandler, AppError, sendSuccess, sendError };
+// exporting
+module.exports = {
+    asyncHandler,
+    AppError,
+    sendSuccess,
+    sendError,
+};

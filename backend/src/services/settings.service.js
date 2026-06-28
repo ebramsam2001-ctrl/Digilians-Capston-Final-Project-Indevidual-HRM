@@ -5,6 +5,20 @@
 // models
 const Settings = require("../models/Settings.model");
 
+// white list
+const ALLOWED_FIELDS = [
+        "companyName",
+        "standardStartTime",
+        "standardHoursPerDay",
+        "graceMinutes",
+        "annualLeaveDays",
+        "sickLeaveDays",
+        "workingDaysPerMonth",
+        "companyEmail",
+        "companyPhone",
+        "companyAddress",
+];
+
 // functions
 // get settings
 const getSettings = async () => {
@@ -16,40 +30,35 @@ const getSettings = async () => {
 };
 
 // update the settings
-const updateSettings = async (updates) => {
-    // whitelist only the fields that HR Admin is allowed to change
-    const allowed = [
-        "companyName",
-        "standardStartTime",
-        "standardHoursPerDay",
-        "graceMinutes",
-        "annualLeaveDays",
-        "sickLeaveDays",
-        "workingDaysPerMonth",
-        "companyEmail",
-        "companyPhone",
-        "companyAddress",
-    ];
+const updateSettings = async (updates, actorId, ipAddress, userAgent) => {
+    const settings = await Settings.getOrCreate();
+    const before = {};
+    const after = {};
 
-    // build a safe update object (no unknown fields)
-    const safeUpdates = {};
-    for(const key of allowed) {
-        if(updates[key] !== undefined) {
-            safeUpdates[key] = updates[key];
+    for (const key of ALLOWED_FIELDS) {
+        if (updates[key] !== undefined) {
+            before[key] = settings[key];
+            settings[key] = updates[key];
+            after[key] = updates[key];
         }
     }
 
-    // get current singleton — creates it if it does not exist
-    const settings = await Settings.getOrCreate();
-
-    // apply updates
-    Object.assign(settings, safeUpdates);
-
-    // save
+    // saveing
     await settings.save();
 
+    // use audit service
+    await auditService.log({
+        actorId: actorId,
+        action: "SETTINGS_UPDATED",
+        resource: "Settings",
+        resourceId: settings._id,
+        changes: { before, after },
+        ipAddress: ipAddress,
+        userAgent: userAgent,
+    });
+
     // return
-    return settings();
+    return settings;
 };
 
 // exporting

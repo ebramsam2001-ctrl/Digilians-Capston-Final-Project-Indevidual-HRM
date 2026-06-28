@@ -1,34 +1,28 @@
 {
   "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "compression": "^1.8.1",
-    "cookie-parser": "^1.4.7",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
     "express-mongo-sanitize": "^2.2.0",
-    "express-rate-limit": "^8.5.2",
-    "express-validator": "^7.3.2",
-    "helmet": "^8.2.0",
+    "express-rate-limit": "^7.3.1",
+    "express-validator": "^7.2.0",
+    "helmet": "^7.1.0",
     "hpp": "^0.2.3",
-    "html-entities": "^2.6.0",
-    "joi": "^18.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "mongo-sanitize": "^1.1.0",
-    "mongodb": "^7.2.0",
-    "mongoose": "^9.6.2",
-    "morgan": "^1.10.1",
-    "multer": "^2.1.1",
-    "node-cron": "^4.5.0",
-    "node-dns": "^0.1.0",
-    "nodemailer": "^9.0.1",
-    "pdfkit": "^0.19.1",
-    "uuid": "^14.0.0",
-    "xss-clean": "^0.1.4"
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.1",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^6.9.14",
+    "pdfkit": "^0.15.0",
+    "socket.io": "^4.7.5",
+    "xss": "^1.0.15"
   },
-  "name": "backend",
+  "name": "hrm-pro-backend",
   "version": "1.0.0",
-  "description": "HR Management System",
+  "description": "HRM Pro — Human Resource Management System Backend",
   "keywords": [
     "HRM",
     "HR Management System"
@@ -44,16 +38,26 @@
   "license": "ISC",
   "author": "Ebram Samuel Helmy",
   "type": "commonjs",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "seed": "node src/seed.js",
-    "test": "jest"
+    "seed": "node src/seeds/seed.js",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "coverage": "jest --coverage"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.7.0",
     "jest": "^30.4.2",
     "nodemon": "^3.1.14",
+    "prettier": "^3.9.1",
     "supertest": "^7.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

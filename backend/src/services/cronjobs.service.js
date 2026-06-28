@@ -6,12 +6,14 @@
 const cron = require("node-cron");
 
 // models
-const Employee = require("../models/Employee.model");
-const Attendance = require("../models/Attendance.model");
+// const Employee = require("../models/Employee.model");
+// const Attendance = require("../models/Attendance.model");
 const User = require("../models/User.model");
 
 // services
 const notificationService = require("./notification.service");
+const attendanceService = require("./attendance.service");
+const auditService = require("./audit.service");
 
 // functions
 // absence detector
@@ -19,88 +21,47 @@ const runAbsenceDetector = async () => {
     try {
         console.log("⏰ [CRON] Absence detector running...");
 
-        // get the date and time
-        const now = new Date();
-        const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        // use attendance mark absent service
+        const result = await attendanceService.markAbsentees();
 
-        // get all active employees
-        const activeEmployees = await Employee.find({ employmentStatus: "active", })
-                                              .select("_id userId firstName lastName");
-        
-        // for each active employee check if they have an attendance record today
-        let markedAbsent = 0;
+        // check if result > 0
+        if (result.markedAbsent > 0) {
+            // Notify all HR admins and super admins
+            const hrUsers = await User.find({
+                role: { $in: ["hr_admin", "super_admin"] },
+                accountStatus: "active",
+            }).select("_id");
 
-        for(const employee of activeEmployees) {
-            // check if an attendance record already exists for today
-            const existing = await Attendance.findOne({
-                employeeId: employee._id,
-                date: today,
-            });
+            // get today
+            const today = new Date().toISOString().split("T")[0];
 
-            // skip if already marked
-            if(existing) {
-                continue;
-            }
-
-            // create the record
-            try {
-                // make it absent
-                await Attendance.create({
-                    employeeId: employee._id,
-                    date: today,
-                    status: "absent",
-                    processedByJob: true,
-                });
-
-                // incremint
-                markedAbsent++;
-
-                // notify the employee
-                if(employee.userId) {
+            // for each HR
+            for (const hrUser of hrUsers) {
+                try {
+                    // use notification create service
                     await notificationService.createNotification(
-                        employee.userId,
+                        hrUser._id,
                         "absent_alert",
-                        `You were marked absent for ${today.toISOString().split("T")[0]}. Contact HR if this is incorrect.`,
-                        { data: today },
-                    ).catch(() => {}); // silent — notification must not block the job
-                }
-            } catch (error) {
-                if(error.code !== 11000) {
-                    console.error(`[CRON] Error marking absent for employee ${employee._id}:`, err.message);
-                } else {
-                    // throw error
-                    throw error;
-                }
-            }
-        }
-
-        // notify all HR Admins with a summary
-        if(markedAbsent > 0) {
-            try {
-                // get all hrs and super admins
-                const hrAdmins = await User.find({
-                    role: { $in: ["hr_admin", "super_admin"] },
-                    accountStatus: "active",
-                }).select("_id");
-
-                // get date
-                const date = today.toISOString().split("T")[0];
-
-                // make the notification
-                for(const admin of hrAdmins) {
-                    await notificationService.createNotification(
-                        admin._id,
-                        "absent_alert",
-                        `${markedAbsent} employee(s) were automatically marked absent for ${date}.`,
+                        `${result.markedAbsent} employee(s) were marked absent for ${today}.`,
                         {
-                            date: date,
-                            markedAbsent: markedAbsent,
+                            date: today,
+                            count: result.markedAbsent,
                         },
-                    ).catch(() => {}); // silent — notification must not block the job
+                    );
+                } catch (error) {
+                    // Notification failure must never stop the cron job
                 }
-            } catch (error) {
-                // do nothing
             }
+
+            // use audit service
+            await auditService.log({
+                action:   "CRON_ABSENCES_MARKED",
+                resource: "Attendance",
+                changes:  {
+                    markedAbsent: result.markedAbsent,
+                    date: today,
+                },
+            });
         }
 
         console.log(`✅ [CRON] Absence detector complete — ${markedAbsent} marked absent.`);

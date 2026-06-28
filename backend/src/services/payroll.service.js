@@ -9,23 +9,39 @@ const PDFDocument = require("pdfkit");
 const Employee = require("../models/Employee.model");
 const Attendance = require("../models/Attendance.model");
 const Payroll = require("../models/Payroll.model");
+const Settings = require("../models/Settings.model");
 
+// services
+const auditService = require("./audit.service");
 
 // utils
 const { AppError } = require("../utils/helpers");
 
 // standards
-const WORKING_DAYS = parseInt(process.env.WORKING_DAYS_PER_MONTH, 10) || 22;
 const HOURS_PER_DAY = 8;
 
 // functions
 // helper functions
+// month label
+const monthLabel = (year, month) => {
+    // get the month
+    const result = `${year}-${String(month).padStart(2, "0")}`;
+
+    // return
+    return result;
+}
+
+// first of month
 const firstOfMonth = (year, month) => {
-    return new Date(
+    // get the first day
+    const result = new Date(
         Date.UTC(parseInt(year), // year
             (parseInt(month) - 1), // month
             1), // day
     );
+
+    // return
+    return result;
 };
 
 // get attendance summary
@@ -76,6 +92,10 @@ const getAttendanceSummary = async (employeeId, monthStart) => {
         if (record.status === "absent") {
             summary.absentDays++;
         }
+
+        if (record.status === "on_leave") {
+            summary.onLeaveDays++;
+        }
     });
 
     // return
@@ -84,21 +104,30 @@ const getAttendanceSummary = async (employeeId, monthStart) => {
 
 // run payroll
 // calculate and save the payroll for all employees
-const runPayroll = async (year, month, processedBy) => {
+const runPayroll = async (year, month, processedBy, ipAddress, userAgent) => {
+    // get the month label
+    const label = monthLabel(year, month);
+
     // start of the month
     const monthStart = firstOfMonth(year, month);
 
     // check if payroll runs this month
-    const existing = await Payroll.findOne({ month: monthStart });
+    const existing = await Payroll.findOne({ month: label });
 
     // check if existing
     if (existing) {
         // throw error
         throw new AppError(
-            `Payroll for ${year}-${String(month).padStart(2, "0")} has already been run.`,
+            `Payroll for ${label} has already been run.`,
             409,
         );
     }
+
+    // get the setting
+    const settings = await Settings.getOrCreate();
+
+    // get the working days
+    const WORKING_DAYS = settings.workingDaysPerMonth;
 
     // get all active employee
     const employees = await Employee.find({ employmentStatus: "active" });
@@ -115,47 +144,74 @@ const runPayroll = async (year, month, processedBy) => {
         // get the employee summary
         const summary = await getAttendanceSummary(employee._id, monthStart);
 
-        // get the employee basicSalary
-        const basicSalary = employee.basicSalary;
-
         // get the hourly and daily rating
-        const hourlyRate = basicSalary / (WORKING_DAYS * HOURS_PER_DAY);
-        const dailyRate = basicSalary / WORKING_DAYS;
+        const hourlyRate = employee.basicSalary / (WORKING_DAYS * HOURS_PER_DAY);
+        const dailyRate = employee.basicSalary / WORKING_DAYS;
 
         // salary deduction
         const lateDeduction = Math.round((summary.totalLateMinutes / 60) * hourlyRate * 100) / 100;
         const absenceDeduction = Math.round(summary.absentDays * dailyRate * 100) / 100;
-        const netSalary = Math.max(0, (basicSalary - lateDeduction - absenceDeduction));
+        const netSalary = Math.max(0, employee.basicSalary - lateDeduction - absenceDeduction);
 
         // push to the payrollDocs
         payrollDocs.push({
             employeeId: employee._id,
-            month: monthStart,
-            basicSalary: basicSalary,
+            month: label, // YYYY-MM string
+            basicSalary: employee.basicSalary,
             lateDeduction: lateDeduction,
             absenceDeduction: absenceDeduction,
             bonus: 0,
             netSalary: netSalary,
-            attendanceSummary: summary,
-            status: "draft",
+            breakdown: {
+                totalWorkingDays: WORKING_DAYS,
+                presentDays: summary.presentDays,
+                absentDays: summary.absentDays,
+                lateDays: summary.lateDays,
+                totalLateMinutes: summary.totalLateMinutes,
+                approvedLeaveDays: summary.onLeaveDays,
+            },
+            status: "finalized",
             processedBy: processedBy,
         });
     }
 
-    // make insert all records at once
-    const result = await Payroll.insertMany(payrollDocs);
+    // Use Promise.allSettled for partial failure resilience
+    const results = await Promise.allSettled(
+        payrollDocs.map((doc) => {
+            return Payroll.create(doc);
+        }));
+
+    const created = results.filter(result => result.status === "fulfilled")
+        .map(result => result.value);
+
+    const failed = results.filter(result => result.status === "rejected");
+
+    // use audit service
+    await auditService.log({
+        actorId: processedBy,
+        action: "PAYROLL_RUN",
+        resource: "Payroll",
+        changes: {
+            month: label,
+            employeesProcessed: created.length,
+            failed: failed.length,
+        },
+        ipAddress: ipAddress,
+        userAgent: userAgent,
+    });
 
     // return
     return {
-        month: `${year}-${String(month).padStart(2, "0")}`,
-        employeesCount: result.length,
-        payroll: result,
+        month: label,
+        employeesCount: created.length,
+        failed: failed.length,
+        payroll: created,
     };
 };
 
 // get payroll history
 // the history of payroll of one employee
-const getPayrollHistory = async (employeeId, { page = 1, limit = 12 }) => {
+const getPayrollHistory = async (employeeId, { page = 1, limit = 12 } = {}) => {
     // make more than one query in the same time
     const [records, total] = await Promise.all([
         Payroll.find({ employeeId: employeeId })
@@ -203,75 +259,67 @@ const generatePayslipPDF = async (payrollId, res) => {
     const record = await getPayrollById(payrollId);
 
     // employee
-    const employee = record.employeeId;
+    const employee = record.employeeId; // populated
 
     // get the month with format
-    const month = record.month.toISOString().slice(0, 7); // ISO format -> slice -> MM-YYYY
+    const month = record.month; // ISO format -> slice -> MM-YYYY
 
     // make the PDF document
-    const document = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({ margin: 50 });
 
     // set response headers so the browser downloads it as a file
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="payslip-${employee.employeeCode}-${month}.pdf"`, // the name form of the PDF
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="payslip-${employee.employeeCode}-${month}.pdf"`);
 
     // to fast response
-    document.pipe(res);
+    doc.pipe(res);
 
-    // Headers
-    document.fontSize(22).font("Helvetica-Bold").text("HRM Pro", { align: "center" });
-    document.fontSize(14).font("Helvetica").text("Monthly Payslip", { align: "center" });
-    document.moveDown();
-    document.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    document.moveDown();
+    // Header
+    doc.fontSize(22).font("Helvetica-Bold").text("HRM Pro", { align: "center" });
+    doc.fontSize(14).font("Helvetica").text("Monthly Payslip", { align: "center" });
+    doc.moveDown();
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown();
 
     // Employee info
-    document.fontSize(12).font("Helvetica-Bold").text("Employee Information");
-    document.font("Helvetica");
-    document.text(`Name:           ${emp.firstName} ${emp.lastName}`);
-    document.text(`Employee Code:  ${emp.employeeCode}`);
-    document.text(`Department:     ${emp.department}`);
-    document.text(`Job Title:      ${emp.jobTitle}`);
-    document.text(`Pay Period:     ${month}`);
-    document.moveDown();
+    doc.fontSize(12).font("Helvetica-Bold").text("Employee Information");
+    doc.font("Helvetica");
+    doc.text(`Name:           ${employee.firstName} ${employee.lastName}`);
+    doc.text(`Employee Code:  ${employee.employeeCode}`);
+    doc.text(`Department:     ${employee.department}`);
+    doc.text(`Job Title:      ${employee.jobTitle}`);
+    doc.text(`Pay Period:     ${month}`);
+    doc.moveDown();
 
-    // Attendance summary
-    const s = record.attendanceSummary;
-    document.font("Helvetica-Bold").text("Attendance Summary");
-    document.font("Helvetica");
-    document.text(`Present Days:       ${s.presentDays}`);
-    document.text(`Late Days:          ${s.lateDays}  (${s.totalLateMinutes} minutes late total)`);
-    document.text(`Absent Days:        ${s.absentDays}`);
-    document.moveDown();
- 
-    // Salary breakdown
-    document.font("Helvetica-Bold").text("Salary Breakdown");
-    document.font("Helvetica");
-    document.text(`Basic Salary:       EGP ${record.basicSalary.toFixed(2)}`);
-    document.text(`Late Deduction:     EGP -${record.lateDeduction.toFixed(2)}`);
-    document.text(`Absence Deduction:  EGP -${record.absenceDeduction.toFixed(2)}`);
-    document.text(`Bonus:              EGP +${record.bonus.toFixed(2)}`);
-    document.moveDown();
-    document.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    document.moveDown();
- 
-    document.fontSize(14).font("Helvetica-Bold")
-       .text(`NET SALARY:  EGP ${record.netSalary.toFixed(2)}`, { align: "right" });
- 
+    // Attendance
+    const b = record.breakdown;
+    doc.font("Helvetica-Bold").text("Attendance Summary");
+    doc.font("Helvetica");
+    doc.text(`Present Days:   ${b.presentDays}`);
+    doc.text(`Late Days:      ${b.lateDays}  (${b.totalLateMinutes} minutes)`);
+    doc.text(`Absent Days:    ${b.absentDays}`);
+    doc.text(`On Leave Days:  ${b.approvedLeaveDays}`);
+    doc.moveDown();
+
+    // Salary
+    doc.font("Helvetica-Bold").text("Salary Breakdown");
+    doc.font("Helvetica");
+    doc.text(`Basic Salary:         EGP ${record.basicSalary.toFixed(2)}`);
+    doc.text(`Late Deduction:       EGP -${record.lateDeduction.toFixed(2)}`);
+    doc.text(`Absence Deduction:    EGP -${record.absenceDeduction.toFixed(2)}`);
+    doc.text(`Bonus:                EGP +${record.bonus.toFixed(2)}`);
+    doc.moveDown();
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown();
+    doc.fontSize(14).font("Helvetica-Bold")
+        .text(`NET SALARY:  EGP ${record.netSalary.toFixed(2)}`, { align: "right" });
+
     // Footer
-    document.moveDown(3);
-    document.fontSize(9)
-            .font("Helvetica")
-            .fillColor("grey")
-            .text(
-                `Generated by HRM Pro on ${new Date().toISOString()}`,
-                { align: "center" }
-            );
- 
-    document.end();
+    doc.moveDown(3);
+    doc.fontSize(9).font("Helvetica").fillColor("grey")
+        .text(`Generated by HRM Pro on ${new Date().toISOString()}`, { align: "center" });
+
+    doc.end();
 };
 
 // exporting
